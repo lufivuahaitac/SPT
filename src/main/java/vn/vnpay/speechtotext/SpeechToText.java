@@ -21,6 +21,10 @@ import okhttp3.RequestBody;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.filefilter.WildcardFileFilter;
+import org.apache.commons.io.monitor.FileAlterationListener;
+import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
+import org.apache.commons.io.monitor.FileAlterationMonitor;
+import org.apache.commons.io.monitor.FileAlterationObserver;
 import vn.vnpay.utils.SequenceGenerator;
 
 /**
@@ -48,48 +52,80 @@ public class SpeechToText {
 
     public static void main(String[] args) throws Exception {
         SpeechToText spt = new SpeechToText();
-        spt.test("./audio/song.mp3");
+        FileAlterationObserver observer = new FileAlterationObserver("./audio/");
+        FileAlterationMonitor monitor = new FileAlterationMonitor(10000);
+        FileAlterationListener listener = new FileAlterationListenerAdaptor() {
+            @Override
+            public void onFileCreate(File file) {
+                // code for processing creation event
+                if (file.getName().endsWith(".m4a")) {
+                    System.out.println("Begin process ------" + file.getName() + "-----------------------");
+                    spt.test(file);
+                    System.out.println("End-----------------" + file.getName() + "-----------------------");
+                }
+            }
+
+            @Override
+            public void onFileDelete(File file) {
+                // code for processing deletion event
+            }
+
+            @Override
+            public void onFileChange(File file) {
+                // code for processing change event
+                System.out.println(file.getName());
+            }
+        };
+        observer.addListener(listener);
+        monitor.addObserver(observer);
+        monitor.start();
+
         //System.out.println(spt.speechFileToText());
     }
 
-    private void test(String filePath) throws IOException {
-        long uid = SequenceGenerator.getInstance().nextId();
+    private void test(File inputFile) {
+        try {
+            long uid = SequenceGenerator.getInstance().nextId();
 
-        FFmpegBuilder builder = new FFmpegBuilder()
-                .setInput(filePath) // Filename, or a FFmpegProbeResult
-                .addOutput("./audio/" + uid + "_%03d.flac")
-                .setAudioChannels(1)
-                .addExtraArgs("-f", "segment")
-                .addExtraArgs("-segment_time", "20")
-                //                .setStartOffset(40, TimeUnit.SECONDS)
-                //                .setDuration(20, TimeUnit.SECONDS)
-                .setAudioSampleRate(44100)
-                .setFormat("flac")
-                .done();
-        executor.createJob(builder).run();
+            FFmpegBuilder builder = new FFmpegBuilder()
+                    .setInput(inputFile.getAbsolutePath()) // Filename, or a FFmpegProbeResult
+                    .addOutput("./audio/" + uid + "_%03d.flac")
+                    .setAudioChannels(1)
+                    .addExtraArgs("-f", "segment")
+                    .addExtraArgs("-segment_time", "20")
+                    //                .setStartOffset(40, TimeUnit.SECONDS)
+                    //                .setDuration(20, TimeUnit.SECONDS)
+                    .setAudioSampleRate(44100)
+                    .setFormat("flac")
+                    .done();
+            executor.createJob(builder).run();
 
-        FileFilter fileFilter = new WildcardFileFilter(uid + "_*.flac");
-        File[] files = audioDir.listFiles(fileFilter);
-        for (int i = 0; i < files.length; i++) {
-            RecognitionAudio audio = RecognitionAudio.builder().content(Base64.encodeBase64String(FileUtils.readFileToByteArray(files[i]))).build();
-            RecognitionConfig config = RecognitionConfig.builder()
-                    .enableAutomaticPunctuation(true)
-                    .encoding("FLAC")
-                    .languageCode("en-US")
-                    .model("video")
-                    .build();
-            RequestObject req = RequestObject.builder()
-                    .audio(audio)
-                    .config(config)
-                    .build();
-            RequestBody body = RequestBody.create(MediaType.parse("application/json"), GSON.toJson(req));
-            Request request = new Request.Builder()
-                    .url("https://cxl-services.appspot.com/proxy?url=https%3A%2F%2Fspeech.googleapis.com%2Fv1p1beta1%2Fspeech%3Arecognize")
-                    .addHeader("Content-Type", "application/json")
-                    .post(body)
-                    .build();
-            HttpClient.getInstance().executeHttpRequest(i + "_" + uid , request);
-            files[i].delete();
+            FileFilter fileFilter = new WildcardFileFilter(uid + "_*.flac");
+            File[] files = audioDir.listFiles(fileFilter);
+            for (int i = 0; i < files.length; i++) {
+                RecognitionAudio audio = RecognitionAudio.builder().content(Base64.encodeBase64String(FileUtils.readFileToByteArray(files[i]))).build();
+                RecognitionConfig config = RecognitionConfig.builder()
+                        .enableAutomaticPunctuation(true)
+                        .encoding("FLAC")
+                        .languageCode("en-US")
+                        .model("video")
+                        .build();
+                RequestObject req = RequestObject.builder()
+                        .audio(audio)
+                        .config(config)
+                        .build();
+                RequestBody body = RequestBody.create(MediaType.parse("application/json"), GSON.toJson(req));
+                Request request = new Request.Builder()
+                        .url("https://cxl-services.appspot.com/proxy?url=https%3A%2F%2Fspeech.googleapis.com%2Fv1p1beta1%2Fspeech%3Arecognize")
+                        .addHeader("Content-Type", "application/json")
+                        .post(body)
+                        .build();
+                HttpClient.getInstance().executeHttpRequest(i + "_" + uid, request);
+                files[i].delete();
+            }
+            inputFile.delete();
+        } catch (Exception e) {
+            System.err.println(e);
         }
     }
 
