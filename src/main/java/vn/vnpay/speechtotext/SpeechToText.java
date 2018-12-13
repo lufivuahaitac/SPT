@@ -7,25 +7,23 @@ package vn.vnpay.speechtotext;
 
 import com.google.gson.Gson;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.IOException;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.net.URI;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import net.bramp.ffmpeg.FFmpeg;
 import net.bramp.ffmpeg.FFmpegExecutor;
 import net.bramp.ffmpeg.FFprobe;
-import net.bramp.ffmpeg.builder.FFmpegBuilder;
-import okhttp3.MediaType;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import org.apache.commons.codec.binary.Base64;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.apache.commons.io.monitor.FileAlterationListener;
 import org.apache.commons.io.monitor.FileAlterationListenerAdaptor;
 import org.apache.commons.io.monitor.FileAlterationMonitor;
 import org.apache.commons.io.monitor.FileAlterationObserver;
-import vn.vnpay.utils.SequenceGenerator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.config.Configurator;
+import vn.vnpay.config.Config;
+import vn.vnpay.daos.ConnectionManager;
+import vn.vnpay.daos.DataDao;
 
 /**
  *
@@ -33,6 +31,8 @@ import vn.vnpay.utils.SequenceGenerator;
  */
 public class SpeechToText {
 
+    private final ExecutorService threadPoolExecutor = Executors.newFixedThreadPool(10);
+    private static Logger logger;
     private static final Gson GSON = new Gson();
     private static FFmpeg ffmpeg;
     private static FFprobe ffprobe;
@@ -41,18 +41,25 @@ public class SpeechToText {
 
     public SpeechToText() {
         try {
-            audioDir = new File("./audio/");
-            ffmpeg = new FFmpeg("D:\\app\\ffmpeg\\bin\\ffmpeg.exe");
-            ffprobe = new FFprobe("D:\\app\\ffmpeg\\bin\\ffprobe.exe");
+            audioDir = new File(Config.getAppConfig().getString("AUDIO_DIR"));
+            ffmpeg = new FFmpeg(Config.getAppConfig().getString("FFMPEG"));
+            ffprobe = new FFprobe(Config.getAppConfig().getString("FFPROBE"));
             executor = new FFmpegExecutor(ffmpeg, ffprobe);
         } catch (IOException ex) {
-            Logger.getLogger(SpeechToText.class.getName()).log(Level.SEVERE, null, ex);
+            System.out.println(ex);
         }
     }
 
     public static void main(String[] args) throws Exception {
+        loadLogger();
+        Config.init();
+        ConnectionManager.getInstance();
+        
+//        System.out.println(DataDao.getInstance().getFullText(3391833422667776l));
+        
+        DataDao.getInstance().initTable();
         SpeechToText spt = new SpeechToText();
-        FileAlterationObserver observer = new FileAlterationObserver("./audio/");
+        FileAlterationObserver observer = new FileAlterationObserver(Config.getAppConfig().getString("AUDIO_DIR"));
         FileAlterationMonitor monitor = new FileAlterationMonitor(10000);
         FileAlterationListener listener = new FileAlterationListenerAdaptor() {
             @Override
@@ -60,7 +67,7 @@ public class SpeechToText {
                 // code for processing creation event
                 if (file.getName().endsWith(".m4a")) {
                     System.out.println("Begin process ------" + file.getName() + "-----------------------");
-                    spt.test(file);
+                    spt.start(file);
                     System.out.println("End-----------------" + file.getName() + "-----------------------");
                 }
             }
@@ -83,50 +90,21 @@ public class SpeechToText {
         //System.out.println(spt.speechFileToText());
     }
 
-    private void test(File inputFile) {
-        try {
-            long uid = SequenceGenerator.getInstance().nextId();
-
-            FFmpegBuilder builder = new FFmpegBuilder()
-                    .setInput(inputFile.getAbsolutePath()) // Filename, or a FFmpegProbeResult
-                    .addOutput("./audio/" + uid + "_%03d.flac")
-                    .setAudioChannels(1)
-                    .addExtraArgs("-f", "segment")
-                    .addExtraArgs("-segment_time", "20")
-                    //                .setStartOffset(40, TimeUnit.SECONDS)
-                    //                .setDuration(20, TimeUnit.SECONDS)
-                    .setAudioSampleRate(44100)
-                    .setFormat("flac")
-                    .done();
-            executor.createJob(builder).run();
-
-            FileFilter fileFilter = new WildcardFileFilter(uid + "_*.flac");
-            File[] files = audioDir.listFiles(fileFilter);
-            for (int i = 0; i < files.length; i++) {
-                RecognitionAudio audio = RecognitionAudio.builder().content(Base64.encodeBase64String(FileUtils.readFileToByteArray(files[i]))).build();
-                RecognitionConfig config = RecognitionConfig.builder()
-                        .enableAutomaticPunctuation(true)
-                        .encoding("FLAC")
-                        .languageCode("en-US")
-                        .model("video")
-                        .build();
-                RequestObject req = RequestObject.builder()
-                        .audio(audio)
-                        .config(config)
-                        .build();
-                RequestBody body = RequestBody.create(MediaType.parse("application/json"), GSON.toJson(req));
-                Request request = new Request.Builder()
-                        .url("https://cxl-services.appspot.com/proxy?url=https%3A%2F%2Fspeech.googleapis.com%2Fv1p1beta1%2Fspeech%3Arecognize")
-                        .addHeader("Content-Type", "application/json")
-                        .post(body)
-                        .build();
-                HttpClient.getInstance().executeHttpRequest(i + "_" + uid, request);
-                files[i].delete();
-            }
-            inputFile.delete();
-        } catch (Exception e) {
-            System.err.println(e);
-        }
+    private void start(File inputFile) {
+        threadPoolExecutor.execute(new HandleFile(inputFile, executor, audioDir, GSON));
+    }
+    
+    private static void loadLogger() throws IOException {
+        String configuration = new File(".").getCanonicalPath() + "/config/log4j2.xml";
+        URI source = new File(configuration).toURI();
+        Configurator.initialize("contextLog4J", null, source);
+        logger = LogManager.getLogger(SpeechToText.class);
+        System.out.println("Init Logger Success");
+        logger.debug("Debugging log");
+        logger.info("Info log");
+        logger.warn("Hey, This is a warning!");
+        logger.error("Oops! We have an Error. OK");
+        logger.fatal("Damn! Fatal error. Please fix me.");
     }
 
 }

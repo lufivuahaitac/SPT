@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration monitorInterval="30">
+    <Properties>
+        <Property name="log-path">/var/logs/SPT</Property>
+    </Properties>
+    <Appenders>
+        <RollingFile  name="info-log" fileName="${log-path}/SPT-info.log" append="true"
+                      filePattern="${log-path}/$${date:yyyy-MM}/SPT-info-%d{yyyyMMdd}-%i.log.gz">
+            <Filters>
+                <ThresholdFilter level="error" onMatch="DENY"   onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="warn"  onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="info"  onMatch="ACCEPT" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="debug"  onMatch="DENY" onMismatch="NEUTRAL"/>
+            </Filters>
+            <PatternLayout>
+                <pattern>%d %-18.18M - %m - %-22.22c{1} %n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="20 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="500"/>
+        </RollingFile >
+        <RollingFile  name="warn-log" fileName="${log-path}/SPT-warn.log" append="true"
+                      filePattern="${log-path}/$${date:yyyy-MM}/SPT-warn-%d{yyyyMMdd}-%i.log.gz">
+            <Filters>
+                <ThresholdFilter level="error" onMatch="DENY"   onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="warn"  onMatch="ACCEPT" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="info"  onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="debug"  onMatch="DENY" onMismatch="NEUTRAL"/>
+            </Filters>
+            <PatternLayout>
+                <pattern>%d %-18.18M - %m - %-22.22c{1} %n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="20 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="500"/>
+        </RollingFile >       
+        <RollingFile  name="error-log" fileName="${log-path}/SPT-error.log" append="true"
+                      filePattern="${log-path}/$${date:yyyy-MM}/SPT-error-%d{yyyyMMdd}-%i.log.gz">
+            <Filters>
+                <ThresholdFilter level="error" onMatch="ACCEPT"   onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="warn"  onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="info"  onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="debug"  onMatch="DENY" onMismatch="NEUTRAL"/>
+            </Filters>
+            <PatternLayout>
+                <pattern>%d %-18.18M - %m - %-22.22c{1} %n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="20 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="500"/>
+        </RollingFile >
+        <RollingFile  name="debug-log" fileName="${log-path}/SPT-debug.log" append="true"
+                      filePattern="${log-path}/$${date:yyyy-MM}/SPT-debug-%d{yyyyMMdd}-%i.log.gz">
+            <Filters>
+                <ThresholdFilter level="error" onMatch="DENY"   onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="warn"  onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="info"  onMatch="DENY" onMismatch="NEUTRAL"/>
+                <ThresholdFilter level="debug"  onMatch="ACCEPT" onMismatch="NEUTRAL"/>
+            </Filters>
+            <PatternLayout>
+                <pattern>%d %-18.18M - %m - %-22.22c{1} %n</pattern>
+            </PatternLayout>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="20 MB"/>
+            </Policies>
+            <DefaultRolloverStrategy max="500"/>
+        </RollingFile >		
+    </Appenders>
+    <Loggers>
+        <Logger name="vn.vnpay" additivity="false">            
+            <appender-ref ref="warn-log" level="warn"/>            
+            <appender-ref ref="error-log" level="error"/>
+            <appender-ref ref="debug-log" level="debug"/>
+            <appender-ref ref="info-log" level="info"/>
+        </Logger>
+        <Root level="ALL">			
+        </Root>		
+    </Loggers>
+</Configuration>
